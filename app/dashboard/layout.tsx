@@ -1,5 +1,9 @@
 import SideNav from '@/app/ui/dashboard/sidenav';
- 
+
+// this enables partial page rendering. won't be seen in local 
+// but can be noticed that production performance is improved 
+export const experimental_ppr = true; 
+
 // This is the layout for all /dashboard routes
 
 export default function Layout({ children }: { children: React.ReactNode }) {
