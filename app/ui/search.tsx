@@ -11,13 +11,12 @@ export default function Search({ placeholder }: { placeholder: string }) {
   const { replace } = useRouter();
 
   const handleSearch = useDebouncedCallback((input: string) => {
-    console.log(`Searching...${input}`);
-
     // Update the URL with the new search query without refreshing the page
     // preserve other existing search params like page
     // /invoices?query=searchTerm&page=2
 
     const params = new URLSearchParams(searchParams.toString());
+    params.set('page', '1'); // reset to page 1 on new search
     if(input) {
       params.set('query', input);
     } else {
