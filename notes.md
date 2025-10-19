@@ -115,4 +115,179 @@ export default function Search({ placeholder }) {
 
 ---
 
-*Last updated: October 16, 2025* 📅
+## 🚀 Rendering Strategies in Next.js
+
+### 🔧 Static Rendering (SSG - Static Site Generation)
+
+#### 📍 **How it works:**
+- 📦 Pages are pre-built at **build time**
+- 📄 HTML is generated once and served from CDN
+- ⚡ Fastest possible loading times
+
+#### ✨ **Characteristics:**
+- 🏎️ **Lightning fast** - No server processing needed
+- 💰 **Cost effective** - Can be served from CDN
+- 🔍 **SEO friendly** - Content is immediately available to crawlers
+- 📊 **Perfect for static content** - Blogs, marketing pages, documentation
+
+#### 🎯 **Best for:**
+- 📝 Blog posts
+- 🏪 Product catalogs
+- 📋 Documentation sites
+- 🎨 Marketing pages
+
+---
+
+### ⚡ Dynamic Rendering (SSR - Server-Side Rendering)
+
+#### 📍 **How it works:**
+- 🔄 Pages are rendered on **every request**
+- 🖥️ Server generates fresh HTML for each user
+- ⏳ User waits for complete page generation
+
+#### ✨ **Characteristics:**
+- 🔄 **Always fresh** - Data is up-to-date on every request
+- 🐌 **Slower TTFB** - Server processing time required
+- 💻 **Server resources** - Requires server capacity
+- 👤 **Personalized content** - Can show user-specific data
+
+#### 🎯 **Best for:**
+- 👤 User dashboards
+- 🛒 Shopping carts
+- 📊 Real-time data displays
+- 🔐 Personalized content
+
+---
+
+### 🌟 Partial Prerendering (PPR) - Best of Both Worlds
+
+#### 📍 **How it works:**
+- 🏗️ **Static shell** is prerendered and served instantly
+- 🔄 **Dynamic parts** are streamed in as they become available
+- 👀 User sees layout immediately, content fills progressively
+
+#### ✨ **Characteristics:**
+- ⚡ **Fast initial load** - Static shell loads instantly (< 100ms)
+- 🔄 **Fresh dynamic data** - Dynamic content streams in real-time
+- 🎯 **Granular control** - Mix static and dynamic on same page
+- 🌊 **Streaming** - Progressive content loading
+
+#### 🎯 **Best for:**
+- 📊 Dashboards with static navigation + dynamic data
+- 🛍️ E-commerce pages with static product info + dynamic inventory
+- 📰 News sites with static layout + dynamic articles
+- 👤 Social media feeds with static UI + dynamic posts
+
+---
+
+## 📊 Rendering Strategies Comparison
+
+| Feature | 🔧 Static (SSG) | ⚡ Dynamic (SSR) | 🌟 Partial Prerendering |
+|---------|-----------------|------------------|------------------------|
+| **Loading Speed** | 🏎️ Fastest | 🐌 Slowest | ⚡ Fast initial + Progressive |
+| **Data Freshness** | 📅 Build-time only | 🔄 Always fresh | 🎯 Mixed (static + fresh) |
+| **Server Load** | ❌ None | 💻 High | 📉 Reduced |
+| **SEO** | 🔍 Perfect | 🔍 Good | 🔍 Perfect |
+| **Personalization** | ❌ None | ✅ Full | 🎯 Dynamic parts only |
+| **Cost** | 💰 Lowest | 💸 Highest | 💵 Medium |
+| **Complexity** | 😊 Simple | 😐 Medium | 🤔 Advanced |
+
+---
+
+## 🎯 When to Use Each Strategy
+
+### 🔧 **Choose Static Rendering when:**
+- Content doesn't change frequently
+- No user-specific data needed
+- Performance is critical
+- Want to minimize server costs
+
+### ⚡ **Choose Dynamic Rendering when:**
+- Content changes frequently
+- Heavy personalization required
+- Real-time data is essential
+- Server resources are abundant
+
+### 🌟 **Choose Partial Prerendering when:**
+- Need both speed AND fresh data
+- Complex pages with mixed content
+- Want to optimize Core Web Vitals
+- Building modern, interactive applications
+
+---
+
+## 💻 Code Examples
+
+### Static Rendering:
+```tsx
+// Automatically static - no dynamic data
+export default function AboutPage() {
+  return (
+    <div>
+      <h1>About Us</h1>
+      <p>This content is generated at build time</p>
+    </div>
+  );
+}
+```
+
+### Dynamic Rendering:
+```tsx
+// Dynamic due to searchParams
+export default async function UserDashboard(props) {
+  const searchParams = await props.searchParams;
+  const userData = await fetchUserData(searchParams.userId);
+  
+  return <div>Welcome {userData.name}</div>;
+}
+```
+
+### Partial Prerendering:
+```tsx
+export default function Dashboard() {
+  return (
+    <div>
+      {/* ✅ Static: Prerendered shell */}
+      <header>Dashboard</header>
+      <nav>Navigation Menu</nav>
+      
+      {/* 🔄 Dynamic: Streamed content */}
+      <Suspense fallback={<Skeleton />}>
+        <UserProfile /> {/* Fetches user data */}
+      </Suspense>
+      
+      <Suspense fallback={<Skeleton />}>
+        <RecentTransactions /> {/* Fetches transaction data */}
+      </Suspense>
+    </div>
+  );
+}
+```
+
+---
+
+## 🎨 Visual Flow Comparison
+
+### Static Rendering Flow:
+```
+Build Time: [Generate HTML] → CDN: [Serve HTML] → User: [Instant Load] ⚡
+```
+
+### Dynamic Rendering Flow:
+```
+Request → Server: [Fetch Data + Generate HTML] → User: [Complete Page] 🐌
+         (2-3 seconds)                              (0 seconds visible)
+```
+
+### Partial Prerendering Flow:
+```
+Request → CDN: [Static Shell] → User: [Layout Visible] → [+ Dynamic Content 1] → [+ Dynamic Content 2]
+         (100ms)               (Immediate)           (500ms)              (1s)
+```
+
+---
+
+
+
+
+
