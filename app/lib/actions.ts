@@ -25,7 +25,11 @@ const FormSchema = z.object({
   date: z.string(),
 });
 
+// Use Zod to update the expected types
 const CreateInvoice = FormSchema.omit({ id: true, date: true }); // Schema for creating a new invoice without id and date. Alternative syntax: .omit(['id', 'date'])
+const UpdateInvoice = FormSchema.omit({ id: true, date: true });
+
+// ACTIONS
 
 export async function createInvoice(formData: FormData) {
   const { customerId, amount, status } = CreateInvoice.parse({
@@ -67,4 +71,23 @@ export async function createInvoice(formData: FormData) {
   console.log('=== INVOICE FORM SUBMISSION ===');
   console.log('Raw form data:', formData);
   console.log('================================');
+}
+
+export async function updateInvoice(id: string, formData: FormData) {
+  const { customerId, amount, status } = UpdateInvoice.parse({
+    customerId: formData.get('customerId'),
+    amount: formData.get('amount'),
+    status: formData.get('status'),
+  });
+ 
+  const amountInCents = amount * 100;
+ 
+  await sql`
+    UPDATE invoices
+    SET customer_id = ${customerId}, amount = ${amountInCents}, status = ${status}
+    WHERE id = ${id}
+  `;
+ 
+  revalidatePath('/dashboard/invoices');
+  redirect('/dashboard/invoices');
 }
