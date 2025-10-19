@@ -62,15 +62,7 @@ export async function createInvoice(formData: FormData) {
     VALUES (${customerId}, ${amountInCents}, ${status}, ${date})
   `;
 
-  //revalidatePath('/dashboard/invoices'); // Revalidate DATA on /dashboard/invoices page to reflect the new invoice (stays on the same page)
   redirect('/dashboard/invoices'); // Redirect to 'ANOTHER PAGE' the invoices dashboard after creation
-
-  // Development: Log form data for debugging
-  // logs seen in console where Next.js server is running
-  // not in DevTools
-  console.log('=== INVOICE FORM SUBMISSION ===');
-  console.log('Raw form data:', formData);
-  console.log('================================');
 }
 
 export async function updateInvoice(id: string, formData: FormData) {
@@ -88,6 +80,11 @@ export async function updateInvoice(id: string, formData: FormData) {
     WHERE id = ${id}
   `;
  
-  revalidatePath('/dashboard/invoices');
+  //evalidatePath('/dashboard/invoices') // don't need revalidation when redirecting
   redirect('/dashboard/invoices');
+}
+
+export async function deleteInvoice(id: string) {
+  await sql`DELETE FROM invoices WHERE id = ${id}`;
+  revalidatePath('/dashboard/invoices'); // Revalidate DATA on /dashboard/invoices page to reflect the new invoice (stays on the same page)
 }
