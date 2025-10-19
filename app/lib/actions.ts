@@ -54,13 +54,18 @@ export async function createInvoice(formData: FormData) {
    * This approach is useful when you have dynamic or numerous form fields.
    */
 
-  const amountInCents = Math.round(amount * 100); // Convert dollars to cents
+  const amountInCents = amount * 100; // Convert dollars to cents
   const date = new Date().toISOString().split('T')[0]; // Get current date in YYYY-MM-DD format
 
+  try {
     await sql`
-    INSERT INTO invoices (customer_id, amount, status, date)
-    VALUES (${customerId}, ${amountInCents}, ${status}, ${date})
-  `;
+        INSERT INTO invoices (customer_id, amount, status, date)
+        VALUES (${customerId}, ${amountInCents}, ${status}, ${date})
+    `;
+  } catch (error) {
+    console.error('Database Error:', error);
+    throw new Error('Failed to create invoice.');
+  }
 
   redirect('/dashboard/invoices'); // Redirect to 'ANOTHER PAGE' the invoices dashboard after creation
 }
@@ -74,11 +79,16 @@ export async function updateInvoice(id: string, formData: FormData) {
  
   const amountInCents = amount * 100;
  
-  await sql`
-    UPDATE invoices
-    SET customer_id = ${customerId}, amount = ${amountInCents}, status = ${status}
-    WHERE id = ${id}
-  `;
+  try {
+    await sql`
+      UPDATE invoices
+      SET customer_id = ${customerId}, amount = ${amountInCents}, status = ${status}
+      WHERE id = ${id}
+    `;
+  } catch (error) {
+    console.error('Database Error:', error);
+    throw new Error('Failed to update invoice.');
+  }
  
   //evalidatePath('/dashboard/invoices') // don't need revalidation when redirecting
   redirect('/dashboard/invoices');
