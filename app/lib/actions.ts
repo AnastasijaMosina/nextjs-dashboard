@@ -9,13 +9,28 @@
  * Note: Unused Server Actions are automatically tree-shaken from the final build bundle.
  */
 
+
+import { z } from 'zod'; // Import Zod for schema validation
+
+const FormSchema = z.object({
+  id: z.string(),
+  customerId: z.string(),
+  amount: z.coerce.number(), // setup to coerce(change) string to number
+  status: z.enum(['pending', 'paid']),
+  date: z.string(),
+});
+
+const CreateInvoice = FormSchema.omit({ id: true, date: true }); // Schema for creating a new invoice without id and date. Alternative syntax: .omit(['id', 'date'])
+
 export async function createInvoice(formData: FormData) {
-  // Extract individual form fields
-  const rawFormData = {
+  const { customerId, amount, status } = CreateInvoice.parse({
     customerId: formData.get('customerId'),
     amount: formData.get('amount'),
-    status: formData.get('status'),
-  };
+    status: formData.get('status')
+  });
+
+  const amountInCents = Math.round(amount * 100); // Convert dollars to cents
+  const date = new Date().toISOString().split('T')[0]; // Get current date in YYYY-MM-DD format
 
   /*
    * Alternative approach for forms with many fields:
