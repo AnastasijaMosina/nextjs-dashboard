@@ -11,6 +11,9 @@
 
 
 import { z } from 'zod'; // Import Zod for schema validation
+import postgres from 'postgres';
+
+const sql = postgres(process.env.DATABASE_URL!,  {ssl: 'require'}); // Initialize Postgres client. SSL required for some hosting providers.
 
 const FormSchema = z.object({
   id: z.string(),
@@ -29,10 +32,7 @@ export async function createInvoice(formData: FormData) {
     status: formData.get('status')
   });
 
-  const amountInCents = Math.round(amount * 100); // Convert dollars to cents
-  const date = new Date().toISOString().split('T')[0]; // Get current date in YYYY-MM-DD format
-
-  /*
+    /*
    * Alternative approach for forms with many fields:
    * 
    * Method 1: Using FormData.entries() to iterate through all fields
@@ -47,6 +47,16 @@ export async function createInvoice(formData: FormData) {
    * 
    * This approach is useful when you have dynamic or numerous form fields.
    */
+
+  const amountInCents = Math.round(amount * 100); // Convert dollars to cents
+  const date = new Date().toISOString().split('T')[0]; // Get current date in YYYY-MM-DD format
+
+    await sql`
+    INSERT INTO invoices (customer_id, amount, status, date)
+    VALUES (${customerId}, ${amountInCents}, ${status}, ${date})
+  `;
+
+
 
   // Development: Log form data for debugging
   // logs seen in console where Next.js server is running
