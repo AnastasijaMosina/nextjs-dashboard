@@ -409,6 +409,179 @@ export async function createInvoice(formData: FormData) {
 
 ---
 
+## ♿ Accessibility (A11y) in Next.js
+
+### 🛠️ **Accessibility Tools & Configuration**
+
+#### **ESLint Plugin: jsx-a11y**
+- **Package**: `eslint-plugin-jsx-a11y`
+- **Purpose**: Catches accessibility issues during development
+- **Integration**: Added to `.eslintrc.json` configuration
+
+#### **Configuration Setup:**
+```json
+{
+  "extends": [
+    "next/core-web-vitals",
+    "next/typescript",
+    "plugin:jsx-a11y/recommended"
+  ],
+  "plugins": ["jsx-a11y"]
+}
+```
+
+---
+
+### 📋 **Accessibility Rules Implemented**
+
+| Rule | Level | Purpose |
+|------|-------|---------|
+| **jsx-a11y/alt-text** | Error | Images must have meaningful alt text |
+| **jsx-a11y/aria-props** | Error | ARIA properties must be valid |
+| **jsx-a11y/aria-proptypes** | Error | ARIA property values must be valid |
+| **jsx-a11y/aria-unsupported-elements** | Error | Elements must support ARIA roles |
+| **jsx-a11y/role-has-required-aria-props** | Error | Roles must have required ARIA properties |
+| **jsx-a11y/role-supports-aria-props** | Error | ARIA props must be supported by role |
+| **jsx-a11y/img-redundant-alt** | Error | Avoid redundant alt text (e.g., "image of") |
+| **jsx-a11y/no-redundant-roles** | Error | Don't use redundant roles |
+| **jsx-a11y/anchor-is-valid** | Error | Links must be properly formed |
+| **jsx-a11y/click-events-have-key-events** | Warning | Click handlers need keyboard support |
+| **jsx-a11y/no-static-element-interactions** | Warning | Interactive elements need proper roles |
+
+---
+
+### 🎯 **Common Accessibility Patterns in Project**
+
+#### **Image Accessibility:**
+```tsx
+// ✅ Good: Meaningful alt text
+<Image
+  src={invoice.image_url}
+  width={28}
+  height={28}
+  alt={`${invoice.name}'s profile picture`}
+/>
+
+// ❌ Bad: Missing or generic alt text
+<Image src="/logo.png" /> // Missing alt
+<Image src="/icon.png" alt="image" /> // Generic alt
+```
+
+#### **Form Accessibility:**
+```tsx
+// ✅ Good: Proper labels and ARIA
+<label htmlFor="customer" className="mb-2 block text-sm font-medium">
+  Choose customer
+</label>
+<select
+  id="customer"
+  name="customerId"
+  aria-describedby="customer-error"
+>
+  <option value="" disabled>Select a customer</option>
+</select>
+
+// ✅ Good: Screen reader only text
+<span className="sr-only">Search</span>
+```
+
+#### **Interactive Elements:**
+```tsx
+// ✅ Good: Proper button semantics
+<Button type="submit">Create Invoice</Button>
+
+// ✅ Good: Link semantics for navigation
+<Link href="/dashboard/invoices">
+  Cancel
+</Link>
+
+// ❌ Bad: Div with click handler (without keyboard support)
+<div onClick={handleClick}>Clickable</div>
+```
+
+---
+
+### 🔍 **How to Check Accessibility**
+
+#### **1. Run ESLint:**
+```bash
+pnpm lint
+```
+
+#### **2. Manual Testing:**
+- **Keyboard Navigation**: Tab through all interactive elements
+- **Screen Reader**: Test with NVDA, JAWS, or VoiceOver
+- **Color Contrast**: Ensure sufficient contrast ratios
+
+#### **3. Browser DevTools:**
+- **Lighthouse Accessibility Audit**
+- **Chrome DevTools Accessibility Panel**
+- **Firefox Accessibility Inspector**
+
+---
+
+### 🎨 **Accessibility Best Practices Used**
+
+#### **Visual Design:**
+- **Color Contrast**: Meet WCAG AA standards (4.5:1 for normal text)
+- **Focus Indicators**: Visible focus rings on interactive elements
+- **Responsive Design**: Works across different screen sizes and zoom levels
+
+#### **Semantic HTML:**
+- **Proper Headings**: Hierarchical heading structure (h1 → h2 → h3)
+- **Form Labels**: Every form input has associated labels
+- **Button vs Link**: Buttons for actions, links for navigation
+
+#### **ARIA Usage:**
+- **aria-describedby**: Link form controls to error messages
+- **role**: Provide semantic meaning when HTML isn't enough
+- **aria-label**: Provide accessible names for complex components
+
+---
+
+### 🚨 **Common Issues & Solutions**
+
+| Issue | Solution | Example |
+|-------|----------|---------|
+| **Missing alt text** | Add descriptive alt attribute | `alt="User profile picture"` |
+| **Unlabeled form inputs** | Use proper label association | `<label htmlFor="email">` |
+| **Poor color contrast** | Use darker colors or different approach | Check with contrast checker |
+| **No keyboard support** | Add keyboard event handlers | `onKeyDown` with `onClick` |
+| **Missing focus indicators** | Ensure CSS doesn't remove `:focus` | Use `focus:` Tailwind classes |
+
+---
+
+### 💡 **Pro Tips for Accessibility**
+
+1. **Test Early**: Run `pnpm lint` frequently during development
+2. **Use Semantic HTML**: Choose the right HTML element for the job
+3. **Test with Keyboard**: Navigate your app using only keyboard
+4. **Screen Reader Testing**: Test with actual assistive technology
+5. **Color Isn't Enough**: Don't rely solely on color to convey information
+
+---
+
+### 🔧 **Project-Specific A11y Setup**
+
+#### **Tailwind Classes for Accessibility:**
+```tsx
+// Screen reader only text
+className="sr-only"
+
+// Focus styles
+className="focus:ring-2 focus:ring-blue-500"
+
+// High contrast borders
+className="border-gray-200 focus:border-blue-500"
+```
+
+#### **Next.js Image Optimization + A11y:**
+- **Automatic lazy loading** for better performance
+- **Responsive images** for different screen sizes  
+- **Required alt attributes** enforced by linting
+
+---
+
 *Last updated: October 19, 2025* 📅
 
 
