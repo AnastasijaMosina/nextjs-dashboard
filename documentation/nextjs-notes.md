@@ -3425,6 +3425,12 @@ export default function Search() {
 
 **Project Location:** `app/ui/search.tsx`
 
+> 💡 **For comprehensive performance optimization guide**, see [Performance Notes](./performance-notes.md)
+> 
+> Covers: Code splitting, lazy loading, Lighthouse audits, Core Web Vitals, and more.
+
+---
+
 ### ♿ Accessibility
 
 #### **ESLint Configuration**
