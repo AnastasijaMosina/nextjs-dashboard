@@ -820,3 +820,532 @@ function Profile() {
 - Use React Query for more complex needs: mutations, pagination, query invalidation, or when you want devtools.
 
 **Summary:** SWR is a great choice for simple, fast, and automatic data fetching. React Query is better for complex data management and advanced scenarios.
+
+## 7. React Caching Patterns
+
+### 🎯 What is Caching in React?
+
+**Caching** in React refers to storing and reusing previously computed values or fetched data to avoid unnecessary recalculations or network requests. React provides several mechanisms for caching at different levels.
+
+#### **Why Cache in React?**
+
+| Benefit | Description |
+|---------|-------------|
+| ⚡ **Performance** | Avoid expensive recalculations and re-renders |
+| 🌐 **Better UX** | Instant data display from cache |
+| 📉 **Reduced Load** | Fewer API calls and computations |
+| 💾 **Memory Efficiency** | Reuse computed values across renders |
+
+---
+
+### 🔄 React Memoization Hooks
+
+#### **useMemo - Memoize Expensive Calculations**
+
+Cache the result of a computation until dependencies change.
+
+```jsx
+import { useMemo } from 'react';
+
+function ProductList({ products, searchTerm }) {
+  // ❌ Without useMemo: Filters on every render (even if products/searchTerm unchanged)
+  // const filteredProducts = products.filter(p => p.name.includes(searchTerm));
+  
+  // ✅ With useMemo: Only recalculates when products or searchTerm changes
+  const filteredProducts = useMemo(() => {
+    console.log('Filtering products...'); // Only logs when dependencies change
+    return products.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
+  }, [products, searchTerm]);
+  
+  return (
+    <ul>
+      {filteredProducts.map(p => <li key={p.id}>{p.name}</li>)}
+    </ul>
+  );
+}
+```
+
+**When to use:**
+- ✅ Expensive calculations (sorting, filtering large arrays)
+- ✅ Derived data that doesn't change often
+- ✅ Preventing unnecessary child re-renders
+
+**When NOT to use:**
+- ❌ Simple, cheap calculations (just do them directly)
+- ❌ Values that change on every render anyway
+- ❌ Premature optimization (measure first!)
+
+**Real-world scenarios:**
+- Filter/sort large datasets
+- Calculate statistics from data
+- Generate complex derived state
+
+#### **useCallback - Memoize Functions**
+
+Cache a function reference to prevent unnecessary re-renders of child components.
+
+```jsx
+import { useState, useCallback } from 'react';
+
+function TodoApp() {
+  const [todos, setTodos] = useState([]);
+  
+  // ❌ Without useCallback: New function on every render
+  // const handleAddTodo = (text) => setTodos([...todos, { id: Date.now(), text }]);
+  
+  // ✅ With useCallback: Same function reference unless dependencies change
+  const handleAddTodo = useCallback((text) => {
+    setTodos(prev => [...prev, { id: Date.now(), text }]);
+  }, []); // Empty deps: function never changes
+  
+  return (
+    <div>
+      <TodoForm onAdd={handleAddTodo} /> {/* Won't re-render unnecessarily */}
+      <TodoList todos={todos} />
+    </div>
+  );
+}
+
+// Child component wrapped in memo to prevent unnecessary re-renders
+const TodoForm = React.memo(({ onAdd }) => {
+  const [text, setText] = useState('');
+  
+  return (
+    <form onSubmit={(e) => {
+      e.preventDefault();
+      onAdd(text);
+      setText('');
+    }}>
+      <input value={text} onChange={e => setText(e.target.value)} />
+      <button type="submit">Add</button>
+    </form>
+  );
+});
+```
+
+**When to use:**
+- ✅ Passing callbacks to optimized child components (React.memo)
+- ✅ Functions in useEffect dependencies
+- ✅ Event handlers passed to many children
+
+**When NOT to use:**
+- ❌ Every function (unnecessary overhead)
+- ❌ Functions not passed to child components
+- ❌ Functions that need to change often
+
+**Real-world scenarios:**
+- Form handlers passed to form components
+- Click handlers for list items
+- Functions used in useEffect dependencies
+
+---
+
+### 🧩 React.memo - Component Memoization
+
+Prevent component re-renders when props haven't changed.
+
+```jsx
+import { memo } from 'react';
+
+// ❌ Without memo: Re-renders every time parent re-renders
+function ExpensiveComponent({ data, onAction }) {
+  console.log('Rendering ExpensiveComponent');
+  return <div>{/* Complex rendering logic */}</div>;
+}
+
+// ✅ With memo: Only re-renders when props change
+const ExpensiveComponent = memo(function ExpensiveComponent({ data, onAction }) {
+  console.log('Rendering ExpensiveComponent');
+  return <div>{/* Complex rendering logic */}</div>;
+});
+
+// Usage
+function Parent() {
+  const [count, setCount] = useState(0);
+  const [data, setData] = useState({ items: [] });
+  
+  const handleAction = useCallback(() => {
+    // Action logic
+  }, []);
+  
+  return (
+    <div>
+      <button onClick={() => setCount(count + 1)}>Count: {count}</button>
+      {/* ExpensiveComponent won't re-render when count changes */}
+      <ExpensiveComponent data={data} onAction={handleAction} />
+    </div>
+  );
+}
+```
+
+**Custom comparison function:**
+
+```jsx
+const UserCard = memo(
+  ({ user, theme }) => <div>{user.name}</div>,
+  (prevProps, nextProps) => {
+    // Return true if props are equal (skip re-render)
+    return prevProps.user.id === nextProps.user.id;
+  }
+);
+```
+
+**When to use:**
+- ✅ Components that render often with same props
+- ✅ Expensive rendering logic
+- ✅ List items in large lists
+
+**When NOT to use:**
+- ❌ Components that always get new props
+- ❌ Simple, fast components
+- ❌ Every component (measure performance first)
+
+---
+
+### 📦 React Server Components Cache (Next.js 15+)
+
+In Next.js with React Server Components, use the `cache()` function to deduplicate requests.
+
+```jsx
+import { cache } from 'react';
+
+// ❌ Without cache: Multiple identical queries
+export const getUser = async (id) => {
+  console.log('Fetching user...'); // Logs multiple times
+  return await db.user.findUnique({ where: { id } });
+};
+
+// ✅ With cache: Deduplicates within single request
+export const getUser = cache(async (id) => {
+  console.log('Fetching user...'); // Logs once per unique ID
+  return await db.user.findUnique({ where: { id } });
+});
+
+// Usage in Server Components
+async function UserProfile({ userId }) {
+  const user = await getUser(userId); // First call
+  return <div>{user.name}</div>;
+}
+
+async function UserPosts({ userId }) {
+  const user = await getUser(userId); // Cached! No second query
+  return <div>Posts by {user.name}</div>;
+}
+
+async function Page({ params }) {
+  return (
+    <div>
+      <UserProfile userId={params.id} />
+      <UserPosts userId={params.id} /> {/* Reuses cached user */}
+    </div>
+  );
+}
+```
+
+**Key points:**
+- ✅ Only works in Server Components (Next.js)
+- ✅ Caches within single request/render
+- ✅ Automatic cleanup after request
+- ❌ Not persisted across requests
+
+**Use for:**
+- Database queries used in multiple components
+- Deduplicating fetch calls in Server Components
+- Avoiding waterfalls in data fetching
+
+---
+
+### 🔄 Client-Side Data Caching
+
+#### **React Query (TanStack Query)**
+
+The most popular solution for client-side data caching.
+
+```jsx
+'use client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+
+function Products() {
+  // Fetch and cache products
+  const { data: products, isLoading, error } = useQuery({
+    queryKey: ['products'], // Cache key
+    queryFn: async () => {
+      const res = await fetch('/api/products');
+      return res.json();
+    },
+    staleTime: 5 * 60 * 1000, // Fresh for 5 minutes
+    gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
+    refetchOnWindowFocus: true, // Refetch when user returns
+  });
+
+  if (isLoading) return <div>Loading...</div>;
+  if (error) return <div>Error: {error.message}</div>;
+
+  return (
+    <ul>
+      {products.map(p => <li key={p.id}>{p.name}</li>)}
+    </ul>
+  );
+}
+
+// Mutations with cache invalidation
+function AddProductForm() {
+  const queryClient = useQueryClient();
+  
+  const mutation = useMutation({
+    mutationFn: async (newProduct) => {
+      const res = await fetch('/api/products', {
+        method: 'POST',
+        body: JSON.stringify(newProduct),
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      // Invalidate products cache to trigger refetch
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+    },
+  });
+
+  return (
+    <button onClick={() => mutation.mutate({ name: 'New Product' })}>
+      Add Product
+    </button>
+  );
+}
+```
+
+**Key features:**
+- ✅ Automatic caching with configurable freshness
+- ✅ Background refetching
+- ✅ Cache invalidation
+- ✅ Optimistic updates
+- ✅ Pagination and infinite queries
+- ✅ DevTools for debugging
+
+#### **SWR (Stale-While-Revalidate)**
+
+Lightweight alternative to React Query.
+
+```jsx
+'use client';
+import useSWR from 'swr';
+
+const fetcher = (url) => fetch(url).then(r => r.json());
+
+function Profile() {
+  const { data, error, isLoading, mutate } = useSWR('/api/user', fetcher, {
+    refreshInterval: 10000, // Poll every 10 seconds
+    revalidateOnFocus: true,
+    dedupingInterval: 2000, // Dedupe requests within 2 seconds
+  });
+
+  if (isLoading) return <div>Loading...</div>;
+  if (error) return <div>Error!</div>;
+
+  return (
+    <div>
+      <h1>{data.name}</h1>
+      <button onClick={() => mutate()}>Refresh</button>
+    </div>
+  );
+}
+```
+
+---
+
+### 🎯 Caching Strategy Comparison
+
+| Pattern | Scope | Purpose | Use Case |
+|---------|-------|---------|----------|
+| **useMemo** | Component | Cache computed values | Expensive calculations |
+| **useCallback** | Component | Cache function references | Event handlers, callbacks |
+| **React.memo** | Component | Prevent re-renders | Expensive components |
+| **cache()** | Server (request) | Dedupe DB queries | Server Components |
+| **React Query** | Client (app) | API data caching | Client-side data fetching |
+| **SWR** | Client (app) | API data caching | Simple client-side fetching |
+
+---
+
+### 🎓 Best Practices
+
+#### **✅ Do's**
+
+1. **Measure before optimizing**
+   ```jsx
+   // Use React DevTools Profiler to identify slow components
+   // Only optimize what needs optimization
+   ```
+
+2. **Use useMemo for expensive calculations**
+   ```jsx
+   const sortedItems = useMemo(() => 
+     items.sort((a, b) => a.value - b.value),
+     [items]
+   );
+   ```
+
+3. **Combine memo with useCallback**
+   ```jsx
+   const MemoizedChild = memo(Child);
+   const handleClick = useCallback(() => { /* ... */ }, []);
+   <MemoizedChild onClick={handleClick} />
+   ```
+
+4. **Use React Query for API calls**
+   ```jsx
+   // Better than useEffect + useState
+   const { data } = useQuery({ queryKey: ['users'], queryFn: fetchUsers });
+   ```
+
+5. **Cache server-side with cache()**
+   ```jsx
+   export const getData = cache(async (id) => db.query(id));
+   ```
+
+#### **❌ Don'ts**
+
+1. **Don't wrap everything in useMemo**
+   ```jsx
+   // ❌ Overkill for simple operations
+   const doubled = useMemo(() => count * 2, [count]);
+   
+   // ✅ Just do it directly
+   const doubled = count * 2;
+   ```
+
+2. **Don't use useCallback without memo**
+   ```jsx
+   // ❌ Pointless if child isn't memoized
+   const handleClick = useCallback(() => { /* ... */ }, []);
+   <NonMemoizedChild onClick={handleClick} />
+   ```
+
+3. **Don't forget dependency arrays**
+   ```jsx
+   // ❌ Missing dependencies
+   const total = useMemo(() => calculateTotal(items, tax), [items]); // Missing tax!
+   
+   // ✅ Include all dependencies
+   const total = useMemo(() => calculateTotal(items, tax), [items, tax]);
+   ```
+
+4. **Don't memoize props objects**
+   ```jsx
+   // ❌ Doesn't work - new object every time
+   <MemoChild config={{ theme: 'dark' }} />
+   
+   // ✅ Memoize the object
+   const config = useMemo(() => ({ theme: 'dark' }), []);
+   <MemoChild config={config} />
+   ```
+
+---
+
+### 🐛 Common Pitfalls
+
+#### **Pitfall 1: Stale Closures in Memoized Functions**
+
+```jsx
+function Counter() {
+  const [count, setCount] = useState(0);
+  
+  // ❌ BAD: Captures count = 0, never updates
+  const logCount = useCallback(() => {
+    console.log(count); // Always logs 0
+  }, []); // Empty deps!
+  
+  // ✅ GOOD: Updates when count changes
+  const logCount = useCallback(() => {
+    console.log(count);
+  }, [count]); // Include count in deps
+  
+  // ✅ BETTER: Use functional update to avoid dependency
+  const increment = useCallback(() => {
+    setCount(prev => prev + 1); // No count dependency needed
+  }, []);
+}
+```
+
+#### **Pitfall 2: Memoizing with Object/Array Props**
+
+```jsx
+// ❌ BAD: New array/object every render
+function Parent() {
+  return <MemoChild items={[1, 2, 3]} />; // New array every time!
+}
+
+// ✅ GOOD: Memoize the array
+function Parent() {
+  const items = useMemo(() => [1, 2, 3], []);
+  return <MemoChild items={items} />;
+}
+
+// ✅ BETTER: Define outside component if static
+const ITEMS = [1, 2, 3];
+function Parent() {
+  return <MemoChild items={ITEMS} />;
+}
+```
+
+#### **Pitfall 3: React Query Not Invalidating**
+
+```jsx
+function App() {
+  const queryClient = useQueryClient();
+  
+  const addItem = useMutation({
+    mutationFn: createItem,
+    // ❌ BAD: Forgot to invalidate cache
+    onSuccess: () => {
+      // Cache still shows old data!
+    }
+  });
+  
+  // ✅ GOOD: Invalidate to refetch
+  const addItem = useMutation({
+    mutationFn: createItem,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['items'] });
+    }
+  });
+}
+```
+
+---
+
+### 📝 Quick Reference
+
+#### **When to Use Each Pattern**
+
+```
+Need to cache...
+│
+├─ Computed value? ──────────────→ useMemo
+├─ Function reference? ──────────→ useCallback
+├─ Component rendering? ─────────→ React.memo
+├─ Server DB query? ─────────────→ cache() (Next.js)
+├─ Client API data? ─────────────→ React Query / SWR
+└─ Simple local state? ──────────→ Just use useState (don't over-optimize!)
+```
+
+#### **Performance Checklist**
+
+1. ✅ Identify slow components with React DevTools Profiler
+2. ✅ Use React.memo for expensive list items
+3. ✅ Memoize expensive calculations with useMemo
+4. ✅ Use useCallback for callbacks to memoized children
+5. ✅ Use React Query for all API calls (replaces useEffect + fetch)
+6. ✅ In Next.js Server Components, use cache() for DB queries
+7. ❌ Don't optimize prematurely - measure first!
+
+---
+
+### 🎓 Summary
+
+**React Caching is about:**
+- 🧮 **Memoization**: Cache values/functions with useMemo/useCallback
+- 🎨 **Component optimization**: Prevent re-renders with React.memo
+- 🗄️ **Server-side**: Dedupe queries with cache() in Server Components
+- 🌐 **Client-side data**: Use React Query or SWR for API caching
+
+**Golden Rule:** Don't optimize until you measure. Use React DevTools Profiler to find actual bottlenecks, then apply the appropriate caching pattern.
