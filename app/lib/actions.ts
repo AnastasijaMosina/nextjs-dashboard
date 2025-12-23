@@ -14,6 +14,8 @@ import { z } from 'zod'; // Import Zod for schema validation
 import { revalidatePath } from 'next/cache'; // Function to revalidate cached paths in Next.js
 import { redirect } from 'next/navigation'; // Import redirect function for navigation
 import postgres from 'postgres'; // Import Postgres client for database interactions
+import { signIn } from '@/auth';
+import { AuthError } from 'next-auth';
 
 const sql = postgres(process.env.DATABASE_URL!,  {ssl: 'require'}); // Initialize Postgres client. SSL required for some hosting providers.
 
@@ -132,4 +134,23 @@ export async function deleteInvoice(id: string) {
 
   await sql`DELETE FROM invoices WHERE id = ${id}`;
   revalidatePath('/dashboard/invoices'); // Revalidate DATA on /dashboard/invoices page to reflect the new invoice (stays on the same page)
+}
+
+export async function authenticate(
+  prevState: string | undefined,
+  formData: FormData,
+) {
+  try {
+    await signIn('credentials', formData);
+  } catch (error) {
+    if (error instanceof AuthError) {
+      switch (error.type) {
+        case 'CredentialsSignin':
+          return 'Invalid credentials.';
+        default:
+          return 'Something went wrong.';
+      }
+    }
+    throw error;
+  }
 }
