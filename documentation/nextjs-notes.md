@@ -14,15 +14,17 @@
 2. [Routing & Navigation](#routing--navigation)
 3. [Rendering Strategies](#rendering-strategies)
 4. [Data Fetching](#data-fetching)
-5. [Server vs Client Components](#server-vs-client-components)
-6. [Server Actions](#server-actions)
-7. [Streaming & Suspense](#streaming--suspense)
-8. [Error Handling](#error-handling)
-9. [Authentication & Middleware](#authentication--middleware)
-10. [Authorization & Access Control](#authorization--access-control)
-11. [Form Validation](#form-validation)
-12. [Optimization](#optimization)
-13. [Best Practices](#best-practices)
+5. [API Calls: Client vs Server](#api-calls-client-vs-server)
+6. [Caching Strategies](#caching-strategies)
+7. [Server vs Client Components](#server-vs-client-components)
+8. [Server Actions](#server-actions)
+9. [Streaming & Suspense](#streaming--suspense)
+10. [Error Handling](#error-handling)
+11. [Authentication & Middleware](#authentication--middleware)
+12. [Authorization & Access Control](#authorization--access-control)
+13. [Form Validation](#form-validation)
+14. [Optimization](#optimization)
+15. [Best Practices](#best-practices)
 
 ---
 
@@ -478,7 +480,1363 @@ export default async function Page() {
 
 ---
 
-## 5. Server vs Client Components
+## 5. API Calls: Client vs Server
+
+> **Key Question:** Should you call an API endpoint from the server-side or client-side?
+> 
+> **Short Answer:** Default to **server-side** unless you need client-side interactivity.
+
+### 🎯 Decision Tree
+
+```
+Need to fetch data from an API?
+│
+├─ For initial page load? ────────────────→ SERVER-SIDE ✅
+├─ For SEO (needs to be in HTML)? ────────→ SERVER-SIDE ✅
+├─ Using sensitive API keys? ─────────────→ SERVER-SIDE ✅
+├─ After user interaction (click/type)? ──→ CLIENT-SIDE 🎯
+├─ Real-time updates (polling)? ──────────→ CLIENT-SIDE 🎯
+├─ Dependent on client state? ────────────→ CLIENT-SIDE 🎯
+└─ Static data that rarely changes? ──────→ SERVER-SIDE ✅
+```
+
+### 🖥️ Server-Side API Calls
+
+**Fetch data on the server** - Default and recommended approach.
+
+#### **When to Use:**
+- ✅ Initial page load
+- ✅ SEO-critical content
+- ✅ Sensitive API keys/credentials
+- ✅ Database queries
+- ✅ Heavy computation
+- ✅ Data aggregation
+
+#### **How to Implement:**
+
+```tsx
+// app/dashboard/stats/page.tsx (Server Component)
+export default async function StatsPage() {
+  // Fetch from external API on the server
+  const res = await fetch('https://api.example.com/stats', {
+    next: { revalidate: 60 } // Cache for 60 seconds
+  });
+  
+  if (!res.ok) {
+    throw new Error('Failed to fetch stats');
+  }
+  
+  const data = await res.json();
+  
+  return (
+    <div>
+      <h1>Statistics</h1>
+      <p>Total: {data.total}</p>
+    </div>
+  );
+}
+```
+
+#### **Fetch Options for Server Components:**
+
+```tsx
+// 1. Force cache (default for GET requests)
+const data = await fetch('https://api.example.com/data', {
+  cache: 'force-cache' // Static at build time
+});
+
+// 2. No caching (dynamic, always fresh)
+const data = await fetch('https://api.example.com/data', {
+  cache: 'no-store' // Fetch on every request
+});
+
+// 3. Revalidate after time period (ISR)
+const data = await fetch('https://api.example.com/data', {
+  next: { revalidate: 3600 } // Revalidate every hour
+});
+
+// 4. With headers (API keys, auth)
+const data = await fetch('https://api.example.com/data', {
+  headers: {
+    'Authorization': `Bearer ${process.env.API_KEY}`, // Safe on server!
+    'Content-Type': 'application/json',
+  },
+});
+```
+
+#### **✅ Advantages:**
+
+| Benefit | Description |
+|---------|-------------|
+| 🔒 **Security** | API keys stay on server |
+| ⚡ **Performance** | Faster - no client round-trip |
+| 🔍 **SEO** | Content in initial HTML |
+| 📦 **Bundle Size** | No fetch code in client JS |
+| 🎯 **Simplicity** | Just use `async/await` |
+
+#### **Example: Calling Your Own API Route**
+
+```tsx
+// app/products/page.tsx (Server Component)
+export default async function ProductsPage() {
+  // Call your own API route from server
+  const res = await fetch('http://localhost:3000/api/products', {
+    next: { revalidate: 60 }
+  });
+  
+  const products = await res.json();
+  
+  return (
+    <div>
+      {products.map(product => (
+        <ProductCard key={product.id} product={product} />
+      ))}
+    </div>
+  );
+}
+```
+
+**⚠️ Note:** When calling your own API routes from Server Components, you're adding an extra hop. Consider calling the database/function directly instead:
+
+```tsx
+// ✅ Better: Skip API route, call directly
+import { getProducts } from '@/app/lib/data';
+
+export default async function ProductsPage() {
+  const products = await getProducts(); // Direct function call
+  return <div>{/* ... */}</div>;
+}
+```
+
+### 💻 Client-Side API Calls
+
+**Fetch data in the browser** - Use when you need interactivity.
+
+#### **When to Use:**
+- 🎯 User interactions (search, filter, paginate)
+- 🔄 Real-time updates (polling, websockets)
+- 📊 Data based on client state
+- 🎨 Progressive enhancement
+- 👤 User-specific actions
+
+#### **Pattern 1: useEffect + fetch**
+
+```tsx
+// app/dashboard/live-stats/page.tsx
+'use client';
+
+import { useState, useEffect } from 'react';
+
+export default function LiveStats() {
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  
+  useEffect(() => {
+    async function fetchStats() {
+      try {
+        setLoading(true);
+        const res = await fetch('/api/stats');
+        
+        if (!res.ok) throw new Error('Failed to fetch');
+        
+        const data = await res.json();
+        setStats(data);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+    
+    fetchStats();
+    
+    // Optional: Poll every 5 seconds
+    const interval = setInterval(fetchStats, 5000);
+    return () => clearInterval(interval);
+  }, []);
+  
+  if (loading) return <div>Loading...</div>;
+  if (error) return <div>Error: {error}</div>;
+  
+  return (
+    <div>
+      <h2>Live Statistics</h2>
+      <p>Active Users: {stats?.activeUsers}</p>
+    </div>
+  );
+}
+```
+
+#### **Pattern 2: Event Handler**
+
+```tsx
+'use client';
+
+import { useState } from 'react';
+
+export default function SearchProducts() {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+  
+  const handleSearch = async (searchTerm: string) => {
+    setQuery(searchTerm);
+    
+    if (!searchTerm) {
+      setResults([]);
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/products/search?q=${searchTerm}`);
+      const data = await res.json();
+      setResults(data);
+    } catch (error) {
+      console.error('Search failed:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  return (
+    <div>
+      <input
+        type="text"
+        value={query}
+        onChange={(e) => handleSearch(e.target.value)}
+        placeholder="Search products..."
+      />
+      
+      {loading && <p>Searching...</p>}
+      
+      <ul>
+        {results.map(product => (
+          <li key={product.id}>{product.name}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+```
+
+#### **Pattern 3: Hybrid (Server + Client)**
+
+Best approach: Initial data from server, updates from client.
+
+```tsx
+// app/products/page.tsx (Server Component)
+import ProductsList from '@/app/ui/products-list';
+import { getProducts } from '@/app/lib/data';
+
+export default async function ProductsPage() {
+  // Fetch initial data on server
+  const initialProducts = await getProducts();
+  
+  return (
+    <div>
+      <h1>Products</h1>
+      {/* Pass to Client Component */}
+      <ProductsList initialData={initialProducts} />
+    </div>
+  );
+}
+```
+
+```tsx
+// app/ui/products-list.tsx (Client Component)
+'use client';
+
+import { useState, useEffect } from 'react';
+
+export default function ProductsList({ initialData }) {
+  const [products, setProducts] = useState(initialData);
+  const [filter, setFilter] = useState('');
+  
+  // Refetch when filter changes
+  useEffect(() => {
+    if (!filter) {
+      setProducts(initialData);
+      return;
+    }
+    
+    async function fetchFiltered() {
+      const res = await fetch(`/api/products?filter=${filter}`);
+      const data = await res.json();
+      setProducts(data);
+    }
+    
+    fetchFiltered();
+  }, [filter, initialData]);
+  
+  return (
+    <div>
+      <input
+        type="text"
+        placeholder="Filter products..."
+        onChange={(e) => setFilter(e.target.value)}
+      />
+      
+      <ul>
+        {products.map(product => (
+          <li key={product.id}>{product.name}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+```
+
+#### **❌ Disadvantages:**
+
+| Issue | Description |
+|-------|-------------|
+| 📦 **Bundle Size** | Adds fetch code to client JS |
+| 🐌 **Slower** | Additional client→server→client round-trip |
+| ❌ **No SEO** | Content not in initial HTML |
+| 🔓 **Exposed** | API endpoints visible to users |
+| 🐛 **More Complex** | Need loading/error states |
+
+### 🔄 API Routes (Backend for Frontend)
+
+Create API endpoints in Next.js for client-side fetching.
+
+#### **How API Routing Works**
+
+Next.js uses **file-system based routing** for API endpoints:
+
+| File Location | URL Path | HTTP Method |
+|--------------|----------|-------------|
+| `app/api/stats/route.ts` | `/api/stats` | Exported function name |
+| `app/api/products/route.ts` | `/api/products` | GET, POST, etc. |
+| `app/api/users/[id]/route.ts` | `/api/users/123` | Dynamic parameter |
+
+**Key Concepts:**
+- **Folder structure = URL path**: `app/api/stats/route.ts` → `/api/stats`
+- **HTTP methods = exported functions**: `GET()`, `POST()`, `PUT()`, `DELETE()`, `PATCH()`
+- **Each `route.ts` can export multiple methods**
+- **Dynamic routes**: Use `[param]` for URL parameters
+
+#### **Basic Example**
+
+```tsx
+// app/api/stats/route.ts
+import { NextResponse } from 'next/server';
+
+// GET /api/stats
+export async function GET() {
+  try {
+    // Fetch from external API or database
+    const data = await fetch('https://external-api.com/stats', {
+      headers: {
+        'Authorization': `Bearer ${process.env.API_KEY}` // Safe on server!
+      }
+    });
+    
+    const stats = await data.json();
+    
+    // Return with cache headers
+    return NextResponse.json(stats, {
+      headers: {
+        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120',
+      },
+    });
+  } catch (error) {
+    return NextResponse.json(
+      { error: 'Failed to fetch stats' },
+      { status: 500 }
+    );
+  }
+}
+
+// POST /api/stats
+export async function POST(request: Request) {
+  const body = await request.json();
+  // Handle POST request
+  return NextResponse.json({ success: true });
+}
+```
+
+#### **Dynamic Routes**
+
+```tsx
+// app/api/products/[id]/route.ts
+export async function GET(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
+  const productId = params.id; // From URL: /api/products/123
+  const product = await fetchProduct(productId);
+  return NextResponse.json(product);
+}
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
+  await deleteProduct(params.id);
+  return NextResponse.json({ success: true });
+}
+```
+
+#### **When to Use API Routes**
+
+✅ **Use API routes for:**
+- Proxying external APIs to hide keys
+- Webhooks from external services
+- Client-side data fetching endpoints
+- Third-party integrations
+
+❌ **Don't use API routes for:**
+- Fetching your own database from Server Components
+- (Call database functions directly instead - faster and simpler)
+
+**Project Location:** Create in `app/api/` directory
+
+### 📊 Comparison Table
+
+| Aspect | Server-Side | Client-Side |
+|--------|-------------|-------------|
+| **Initial Load** | ✅ Faster (no client fetch) | 🐌 Slower (waterfall) |
+| **SEO** | ✅ Content in HTML | ❌ Not in initial HTML |
+| **Security** | ✅ Hide API keys | ⚠️ Keys exposed (use API routes) |
+| **Interactivity** | ❌ Static after render | ✅ Dynamic updates |
+| **Code Location** | Server Component | Client Component |
+| **Bundle Size** | ✅ Zero client JS | 📦 Adds to bundle |
+| **Use Case** | Initial page data | User interactions |
+| **Caching** | Next.js cache | Browser cache |
+| **Error Handling** | `error.tsx` boundary | Try/catch + state |
+
+### 🎯 Real-World Examples
+
+#### **Example 1: Dashboard Stats (Server-Side)**
+
+```tsx
+// app/dashboard/page.tsx
+// ✅ Server-side: Initial load, SEO important
+export default async function Dashboard() {
+  const stats = await fetch('https://api.example.com/stats', {
+    next: { revalidate: 300 } // Cache 5 minutes
+  }).then(res => res.json());
+  
+  return (
+    <div>
+      <h1>Dashboard</h1>
+      <StatsCard data={stats} />
+    </div>
+  );
+}
+```
+
+#### **Example 2: Search (Client-Side)**
+
+```tsx
+// app/search/page.tsx
+'use client';
+// ✅ Client-side: User interaction, real-time
+export default function SearchPage() {
+  const [results, setResults] = useState([]);
+  
+  const handleSearch = async (query) => {
+    const res = await fetch(`/api/search?q=${query}`);
+    const data = await res.json();
+    setResults(data);
+  };
+  
+  return (
+    <div>
+      <input onChange={(e) => handleSearch(e.target.value)} />
+      <SearchResults results={results} />
+    </div>
+  );
+}
+```
+
+#### **Example 3: Your Current Project Pattern**
+
+```tsx
+// ✅ Your codebase: Direct database access (best!)
+// app/ui/dashboard/revenue-chart.tsx
+export default async function RevenueChart() {
+  const revenue = await fetchRevenue(); // Direct DB call, not API
+  return <Chart data={revenue} />;
+}
+```
+
+**Why this is best:**
+- No unnecessary API route
+- Faster (no HTTP overhead)
+- Simpler code
+- Direct database access
+
+### ⚠️ Common Mistakes
+
+#### **❌ Mistake 1: Client Component with Sensitive Keys**
+
+```tsx
+'use client';
+// ❌ BAD: API key exposed in browser!
+export default function Products() {
+  const [products, setProducts] = useState([]);
+  
+  useEffect(() => {
+    fetch('https://api.example.com/products', {
+      headers: {
+        'Authorization': `Bearer ${process.env.API_KEY}` // 🚨 EXPOSED!
+      }
+    });
+  }, []);
+}
+```
+
+#### **✅ Fix: Use API Route as Proxy**
+
+```tsx
+// app/api/products/route.ts (Server-side)
+export async function GET() {
+  const products = await fetch('https://api.example.com/products', {
+    headers: {
+      'Authorization': `Bearer ${process.env.API_KEY}` // ✅ Safe on server
+    }
+  });
+  return NextResponse.json(await products.json());
+}
+
+// app/products/page.tsx (Client Component)
+'use client';
+export default function Products() {
+  useEffect(() => {
+    fetch('/api/products'); // ✅ Call your API route
+  }, []);
+}
+```
+
+#### **❌ Mistake 2: Unnecessary API Route**
+
+```tsx
+// ❌ BAD: Extra hop for no reason
+// app/api/invoices/route.ts
+export async function GET() {
+  const invoices = await sql`SELECT * FROM invoices`;
+  return NextResponse.json(invoices);
+}
+
+// app/invoices/page.tsx (Server Component)
+export default async function InvoicesPage() {
+  const res = await fetch('http://localhost:3000/api/invoices');
+  const invoices = await res.json();
+  return <InvoicesList invoices={invoices} />;
+}
+```
+
+#### **✅ Fix: Call Database Directly**
+
+```tsx
+// ✅ GOOD: Direct call, no API route needed
+// app/invoices/page.tsx (Server Component)
+import { fetchInvoices } from '@/app/lib/data';
+
+export default async function InvoicesPage() {
+  const invoices = await fetchInvoices(); // Direct DB call
+  return <InvoicesList invoices={invoices} />;
+}
+```
+
+### 📝 Best Practices Summary
+
+1. **Default to server-side fetching** in Server Components
+2. **Use client-side only for interactivity** (search, filters, real-time)
+3. **Direct database access** is better than calling your own API
+4. **API routes are for** protecting keys or acting as a proxy
+5. **Hybrid approach** when you need both: initial server data + client updates
+6. **Never expose sensitive keys** in client-side code
+7. **Use proper caching** with `next: { revalidate }` on server
+8. **Handle loading and error states** on client
+
+### 🔗 Quick Reference
+
+| Task | Approach | Code Location |
+|------|----------|---------------|
+| **Fetch for initial page** | Server Component | `app/page.tsx` |
+| **Search as you type** | Client Component | `'use client'` + `useEffect` |
+| **Protect API keys** | API Route | `app/api/*/route.ts` |
+| **Database queries** | Direct function call | `app/lib/data.ts` |
+| **Real-time polling** | Client Component | `setInterval` in `useEffect` |
+| **External API (build time)** | Server Component | `fetch` with `cache: 'force-cache'` |
+| **External API (runtime)** | Server Component | `fetch` with `cache: 'no-store'` |
+
+---
+
+## 6. Caching Strategies
+
+### 🎯 What is Caching?
+
+**Caching** is the practice of storing data in a temporary storage location (cache) so future requests for that data can be served faster. Instead of fetching data from the original source every time, you retrieve it from the cache.
+
+#### **Why Use Caching?**
+
+| Benefit | Description |
+|---------|-------------|
+| ⚡ **Performance** | Faster response times - data served from cache instead of database/API |
+| 💰 **Cost Reduction** | Fewer database queries and API calls = lower costs |
+| 📉 **Reduced Server Load** | Less work for servers = better scalability |
+| 🌐 **Better UX** | Instant loading for users with cached data |
+| 🔄 **Resilience** | Can serve stale data if backend is down |
+
+#### **Cache Layers in Next.js**
+
+```
+User Request
+    ↓
+1. Browser Cache (HTTP headers)
+    ↓
+2. CDN Cache (Vercel Edge Network)
+    ↓
+3. Next.js Data Cache (Server-side)
+    ↓
+4. React Cache (Request Memoization)
+    ↓
+5. Database
+```
+
+---
+
+### 🗄️ Next.js Data Cache
+
+Next.js has a built-in **Data Cache** on the server that persists across requests and deployments.
+
+#### **Default Behavior: fetch() is Cached**
+
+```tsx
+// ✅ Automatically cached by default
+export default async function Page() {
+  const data = await fetch('https://api.example.com/data');
+  // Subsequent requests use cached data
+  return <div>{JSON.stringify(data)}</div>;
+}
+```
+
+#### **Cache Options**
+
+##### **1. Force Cache (Static - Default)**
+```tsx
+// Cached at build time, never revalidated
+const data = await fetch('https://api.example.com/data', {
+  cache: 'force-cache' // Default behavior
+});
+```
+
+✅ **Use for:**
+- Static content that rarely changes
+- Marketing pages
+- Documentation
+- Product catalogs
+
+##### **2. No Store (Dynamic - Always Fresh)**
+```tsx
+// Never cached, fetched on every request
+const data = await fetch('https://api.example.com/data', {
+  cache: 'no-store'
+});
+```
+
+✅ **Use for:**
+- User-specific data
+- Real-time data
+- Personalized content
+- Shopping carts
+
+##### **3. Revalidate (ISR - Time-Based)**
+```tsx
+// Cached, but revalidated every 60 seconds
+const data = await fetch('https://api.example.com/data', {
+  next: { revalidate: 60 } // Seconds
+});
+```
+
+✅ **Use for:**
+- Content that updates periodically
+- News feeds
+- Product prices
+- Stock levels
+
+**How it works:**
+1. First request: Fetch from source → Cache it
+2. Next 60 seconds: Serve from cache (fast!)
+3. After 60 seconds: Serve stale cache, fetch fresh data in background
+4. Future requests: Serve fresh cached data
+
+##### **4. Tags-Based Revalidation (On-Demand)**
+```tsx
+// Cache with a tag, revalidate when needed
+const data = await fetch('https://api.example.com/products', {
+  next: { tags: ['products'] }
+});
+
+// Later, in a Server Action:
+import { revalidateTag } from 'next/cache';
+
+export async function updateProduct() {
+  await sql`UPDATE products ...`;
+  revalidateTag('products'); // Invalidate all 'products' cache
+}
+```
+
+✅ **Use for:**
+- Manual cache invalidation
+- When you know data changed
+- CRUD operations
+
+**Project Location:** `app/lib/actions.ts` (uses `revalidatePath`)
+
+#### **Page-Level Revalidation**
+
+```tsx
+// app/products/page.tsx
+// Revalidate entire page every 3600 seconds
+export const revalidate = 3600;
+
+export default async function ProductsPage() {
+  const products = await db.product.findMany();
+  return <ProductList products={products} />;
+}
+```
+
+#### **Route Segment Config**
+
+```tsx
+// app/dashboard/page.tsx
+export const dynamic = 'force-static'; // Default
+export const dynamic = 'force-dynamic'; // Like cache: 'no-store'
+export const dynamic = 'error'; // Error if dynamic functions used
+export const dynamic = 'auto'; // Smart default
+
+export const revalidate = 60; // Time-based revalidation
+export const revalidate = false; // Cache forever
+```
+
+---
+
+### 🌐 HTTP Caching (Cache-Control Headers)
+
+HTTP caching is browser and CDN caching controlled by headers.
+
+#### **Cache-Control Directives**
+
+```tsx
+// app/api/products/route.ts
+export async function GET() {
+  const products = await db.product.findMany();
+  
+  return new Response(JSON.stringify(products), {
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120'
+    }
+  });
+}
+```
+
+#### **Common Directives**
+
+| Directive | Meaning | Use Case |
+|-----------|---------|----------|
+| `public` | Can be cached by browsers and CDNs | Public data |
+| `private` | Only browser cache, not CDNs | User-specific data |
+| `no-cache` | Must revalidate with server before using | Always verify freshness |
+| `no-store` | Never cache | Sensitive data |
+| `max-age=60` | Cache for 60 seconds | Browser cache duration |
+| `s-maxage=60` | CDN cache for 60 seconds | CDN cache duration |
+| `stale-while-revalidate=120` | Serve stale for 120s while fetching fresh | Better UX during updates |
+
+#### **Real-World Example**
+
+```tsx
+// app/api/stats/route.ts
+export async function GET() {
+  const stats = await sql`SELECT COUNT(*) FROM invoices`;
+  
+  return NextResponse.json(stats, {
+    headers: {
+      // Browser: cache 30s
+      // CDN: cache 30s
+      // If stale: serve cached version for 60s while fetching new
+      'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60'
+    }
+  });
+}
+```
+
+**Timeline:**
+- 0-30s: Serve from cache (CDN + browser)
+- 30-90s: Serve stale cache + fetch new in background
+- 90s+: Must fetch fresh
+
+**Project Location:** `app/api/stats/route.ts`
+
+---
+
+### 📦 React Cache (Request Memoization)
+
+React automatically deduplicates `fetch()` requests within the same render pass.
+
+#### **Automatic Deduplication**
+
+```tsx
+// These three identical requests are deduplicated into ONE
+export default async function Page() {
+  const data1 = await fetch('https://api.example.com/user/1');
+  const data2 = await fetch('https://api.example.com/user/1'); // Same URL
+  const data3 = await fetch('https://api.example.com/user/1'); // Same URL
+  
+  // Only ONE network request is made!
+}
+```
+
+#### **Manual Memoization with `cache()`**
+
+For non-fetch functions (database queries):
+
+```tsx
+import { cache } from 'react';
+
+// Without cache: Called 3 times = 3 DB queries
+export const getUser = async (id: string) => {
+  return await db.user.findUnique({ where: { id } });
+};
+
+// With cache: Called 3 times = 1 DB query
+export const getUser = cache(async (id: string) => {
+  return await db.user.findUnique({ where: { id } });
+});
+```
+
+✅ **Benefits:**
+- Reduces duplicate database queries
+- Automatic within single request
+- No configuration needed
+
+⚠️ **Limitations:**
+- Only works within single request/render
+- Cleared after request completes
+- Not persisted across requests
+
+**Project Location:** Can be used in `app/lib/data.ts`
+
+---
+
+### 🔄 Client-Side Caching with React Query
+
+For client-side data fetching and caching, use **React Query** (TanStack Query).
+
+#### **Setup**
+
+```bash
+npm install @tanstack/react-query
+```
+
+```tsx
+// app/layout.tsx (or providers.tsx)
+'use client';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 60 * 1000, // Data fresh for 60 seconds
+      gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
+    },
+  },
+});
+
+export default function Providers({ children }) {
+  return (
+    <QueryClientProvider client={queryClient}>
+      {children}
+    </QueryClientProvider>
+  );
+}
+```
+
+#### **Basic Usage**
+
+```tsx
+'use client';
+import { useQuery } from '@tanstack/react-query';
+
+export default function Products() {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['products'], // Cache key
+    queryFn: async () => {
+      const res = await fetch('/api/products');
+      return res.json();
+    },
+    staleTime: 5 * 60 * 1000, // Fresh for 5 minutes
+    gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
+  });
+
+  if (isLoading) return <div>Loading...</div>;
+  if (error) return <div>Error: {error.message}</div>;
+  
+  return <ProductList products={data} />;
+}
+```
+
+#### **Key Concepts**
+
+| Concept | Description | Default |
+|---------|-------------|---------|
+| `staleTime` | How long data is considered fresh | 0 (immediately stale) |
+| `gcTime` | How long unused data stays in cache | 5 minutes |
+| `refetchOnMount` | Refetch when component mounts | true (if stale) |
+| `refetchOnWindowFocus` | Refetch when window focused | true |
+| `refetchOnReconnect` | Refetch when internet reconnects | true |
+
+#### **Mutations (Updates)**
+
+```tsx
+'use client';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+
+export default function AddProduct() {
+  const queryClient = useQueryClient();
+  
+  const mutation = useMutation({
+    mutationFn: async (newProduct) => {
+      const res = await fetch('/api/products', {
+        method: 'POST',
+        body: JSON.stringify(newProduct),
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      // Invalidate and refetch products list
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+    },
+  });
+
+  return (
+    <button onClick={() => mutation.mutate({ name: 'New Product' })}>
+      Add Product
+    </button>
+  );
+}
+```
+
+#### **Optimistic Updates**
+
+```tsx
+const mutation = useMutation({
+  mutationFn: updateProduct,
+  onMutate: async (updatedProduct) => {
+    // Cancel outgoing refetches
+    await queryClient.cancelQueries({ queryKey: ['products'] });
+    
+    // Snapshot previous value
+    const previousProducts = queryClient.getQueryData(['products']);
+    
+    // Optimistically update cache
+    queryClient.setQueryData(['products'], (old) => 
+      old.map(p => p.id === updatedProduct.id ? updatedProduct : p)
+    );
+    
+    return { previousProducts };
+  },
+  onError: (err, updatedProduct, context) => {
+    // Rollback on error
+    queryClient.setQueryData(['products'], context.previousProducts);
+  },
+  onSettled: () => {
+    // Refetch after mutation
+    queryClient.invalidateQueries({ queryKey: ['products'] });
+  },
+});
+```
+
+---
+
+### 📊 Caching Strategy Comparison
+
+| Strategy | Scope | Persistence | Use Case | Freshness |
+|----------|-------|-------------|----------|-----------|
+| **Next.js Data Cache** | Server | Across requests/deployments | Server Components | Time-based or on-demand |
+| **HTTP Cache (CDN)** | CDN/Browser | Until TTL expires | API routes, static assets | Time-based (Cache-Control) |
+| **React Cache** | Server | Single request | Dedupe DB queries in same request | Request lifecycle |
+| **React Query** | Client (browser) | Until tab closed | Client Components, user interactions | Configurable (staleTime) |
+
+---
+
+### 🎯 Choosing the Right Strategy
+
+#### **Decision Tree**
+
+```
+Where is the data fetched?
+│
+├─ Server Component?
+│  │
+│  ├─ Static content? ──────────→ Next.js Data Cache (force-cache)
+│  ├─ Updates periodically? ────→ Next.js Data Cache (revalidate: 60)
+│  ├─ Real-time/user-specific? ─→ No cache (cache: 'no-store')
+│  └─ Multiple same queries? ───→ React cache() function
+│
+└─ Client Component?
+   │
+   ├─ User interactions? ───────→ React Query
+   ├─ Real-time polling? ───────→ React Query (refetchInterval)
+   ├─ Form submissions? ────────→ React Query mutations
+   └─ API endpoint? ────────────→ HTTP Cache-Control headers
+```
+
+#### **Practical Examples**
+
+##### **Example 1: E-commerce Product Page**
+
+```tsx
+// Server Component - Product details (updates occasionally)
+export default async function ProductPage({ params }) {
+  const product = await fetch(`https://api.example.com/products/${params.id}`, {
+    next: { revalidate: 3600 } // Revalidate every hour
+  });
+  
+  return (
+    <div>
+      <ProductDetails product={product} />
+      <AddToCartButton productId={product.id} /> {/* Client Component */}
+    </div>
+  );
+}
+```
+
+```tsx
+// Client Component - Cart (user-specific, real-time)
+'use client';
+import { useQuery } from '@tanstack/react-query';
+
+export default function Cart() {
+  const { data: cart } = useQuery({
+    queryKey: ['cart'],
+    queryFn: () => fetch('/api/cart').then(r => r.json()),
+    staleTime: 0, // Always refetch (user-specific)
+    refetchOnWindowFocus: true, // Update when user returns
+  });
+  
+  return <CartItems items={cart.items} />;
+}
+```
+
+##### **Example 2: Dashboard with Real-Time Stats**
+
+```tsx
+// Server Component - Static layout
+export default async function DashboardLayout() {
+  const config = await fetch('https://api.example.com/config', {
+    cache: 'force-cache' // Static, rarely changes
+  });
+  
+  return (
+    <div>
+      <Sidebar config={config} />
+      <LiveStats /> {/* Client Component */}
+    </div>
+  );
+}
+```
+
+```tsx
+// Client Component - Real-time polling
+'use client';
+import { useQuery } from '@tanstack/react-query';
+
+export default function LiveStats() {
+  const { data } = useQuery({
+    queryKey: ['stats'],
+    queryFn: () => fetch('/api/stats').then(r => r.json()),
+    refetchInterval: 5000, // Poll every 5 seconds
+  });
+  
+  return <StatsCards data={data} />;
+}
+```
+
+##### **Example 3: Blog with Comments**
+
+```tsx
+// Server Component - Blog post (static)
+export default async function BlogPost({ params }) {
+  const post = await fetch(`https://api.example.com/posts/${params.slug}`, {
+    next: { 
+      tags: ['posts', `post-${params.slug}`],
+      revalidate: 86400 // 24 hours
+    }
+  });
+  
+  return (
+    <article>
+      <h1>{post.title}</h1>
+      <div>{post.content}</div>
+      <Comments postId={post.id} /> {/* Client Component */}
+    </article>
+  );
+}
+
+// Server Action - Revalidate when post updated
+export async function updatePost(slug: string) {
+  await db.post.update(...);
+  revalidateTag(`post-${slug}`); // Clear specific post cache
+}
+```
+
+```tsx
+// Client Component - Comments (interactive)
+'use client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+
+export default function Comments({ postId }) {
+  const queryClient = useQueryClient();
+  
+  const { data: comments } = useQuery({
+    queryKey: ['comments', postId],
+    queryFn: () => fetch(`/api/comments?postId=${postId}`).then(r => r.json()),
+    staleTime: 60 * 1000, // Fresh for 1 minute
+  });
+  
+  const addComment = useMutation({
+    mutationFn: (text) => fetch('/api/comments', {
+      method: 'POST',
+      body: JSON.stringify({ postId, text }),
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['comments', postId] });
+    },
+  });
+  
+  return (
+    <div>
+      {comments.map(c => <Comment key={c.id} {...c} />)}
+      <AddCommentForm onSubmit={addComment.mutate} />
+    </div>
+  );
+}
+```
+
+---
+
+### ⚠️ Common Caching Pitfalls
+
+#### **❌ Mistake 1: Not Invalidating Cache After Mutations**
+
+```tsx
+// ❌ BAD: Cache not updated after creating invoice
+export async function createInvoice(formData: FormData) {
+  await sql`INSERT INTO invoices ...`;
+  redirect('/dashboard/invoices'); // Old cached data shown
+}
+
+// ✅ GOOD: Revalidate path to clear cache
+export async function createInvoice(formData: FormData) {
+  await sql`INSERT INTO invoices ...`;
+  revalidatePath('/dashboard/invoices'); // Clear cache
+  redirect('/dashboard/invoices');
+}
+```
+
+#### **❌ Mistake 2: Caching User-Specific Data**
+
+```tsx
+// ❌ BAD: User data cached, might show wrong user's data
+export default async function ProfilePage() {
+  const user = await fetch('https://api.example.com/me', {
+    next: { revalidate: 60 } // ❌ Cached across users!
+  });
+  return <Profile user={user} />;
+}
+
+// ✅ GOOD: Never cache user-specific data
+export default async function ProfilePage() {
+  const user = await fetch('https://api.example.com/me', {
+    cache: 'no-store' // ✅ Always fresh
+  });
+  return <Profile user={user} />;
+}
+```
+
+#### **❌ Mistake 3: Over-Caching Dynamic Data**
+
+```tsx
+// ❌ BAD: Stock levels cached for 1 hour (might show wrong stock)
+const stock = await fetch('https://api.example.com/stock', {
+  next: { revalidate: 3600 }
+});
+
+// ✅ GOOD: Real-time data with short cache or no cache
+const stock = await fetch('https://api.example.com/stock', {
+  next: { revalidate: 10 } // 10 seconds
+});
+```
+
+#### **❌ Mistake 4: Not Using React Query for Client Fetching**
+
+```tsx
+// ❌ BAD: Manual fetch in useEffect, no caching
+'use client';
+export default function Products() {
+  const [products, setProducts] = useState([]);
+  
+  useEffect(() => {
+    fetch('/api/products')
+      .then(r => r.json())
+      .then(setProducts);
+  }, []); // Refetches on every mount, no cache
+  
+  return <ProductList products={products} />;
+}
+
+// ✅ GOOD: React Query with caching
+'use client';
+export default function Products() {
+  const { data: products } = useQuery({
+    queryKey: ['products'],
+    queryFn: () => fetch('/api/products').then(r => r.json()),
+    staleTime: 5 * 60 * 1000, // Cached for 5 minutes
+  });
+  
+  return <ProductList products={products} />;
+}
+```
+
+---
+
+### 🛠️ Debugging Cache Issues
+
+#### **Clear Next.js Cache**
+
+```bash
+# Delete .next folder (build cache)
+rm -rf .next
+
+# Clear data cache (development)
+# In your Server Action or API route:
+import { revalidatePath, revalidateTag } from 'next/cache';
+
+revalidatePath('/'); // Clear specific path
+revalidateTag('products'); // Clear specific tag
+```
+
+#### **Inspect HTTP Cache Headers**
+
+```bash
+# Check Cache-Control headers
+curl -I http://localhost:3000/api/products
+
+# Look for:
+# Cache-Control: public, s-maxage=60, stale-while-revalidate=120
+```
+
+#### **React Query Devtools**
+
+```tsx
+// Install devtools
+npm install @tanstack/react-query-devtools
+
+// Add to layout
+'use client';
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
+
+export default function Providers({ children }) {
+  return (
+    <QueryClientProvider client={queryClient}>
+      {children}
+      <ReactQueryDevtools initialIsOpen={false} />
+    </QueryClientProvider>
+  );
+}
+```
+
+---
+
+### 📝 Caching Best Practices
+
+#### **✅ Do's**
+
+1. **Cache static content aggressively**
+   ```tsx
+   // Blog posts, docs, marketing pages
+   cache: 'force-cache'
+   ```
+
+2. **Use time-based revalidation for semi-static data**
+   ```tsx
+   // Product prices, news feeds
+   next: { revalidate: 300 } // 5 minutes
+   ```
+
+3. **Invalidate cache after mutations**
+   ```tsx
+   revalidatePath('/products');
+   revalidateTag('products');
+   ```
+
+4. **Use React Query for client-side data**
+   ```tsx
+   // Better than useEffect + fetch
+   useQuery({ queryKey: ['data'], queryFn: fetchData })
+   ```
+
+5. **Set appropriate Cache-Control headers for APIs**
+   ```tsx
+   'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120'
+   ```
+
+6. **Use React cache() for duplicate DB queries**
+   ```tsx
+   export const getUser = cache(async (id) => db.user.findUnique({ where: { id } }));
+   ```
+
+#### **❌ Don'ts**
+
+1. **Don't cache user-specific data**
+   ```tsx
+   // Use cache: 'no-store' for user profiles, carts, dashboards
+   ```
+
+2. **Don't forget to invalidate after mutations**
+   ```tsx
+   // Always revalidatePath or revalidateTag after updates
+   ```
+
+3. **Don't use long cache times for real-time data**
+   ```tsx
+   // Stock levels, live scores: use short revalidate or no-store
+   ```
+
+4. **Don't manually manage loading states for cached data**
+   ```tsx
+   // Use React Query instead of useState + useEffect
+   ```
+
+5. **Don't cache sensitive data in CDN**
+   ```tsx
+   // Use 'Cache-Control': 'private' for sensitive data
+   ```
+
+---
+
+### 🎓 Summary
+
+| Type | Best For | Configuration | Persistence |
+|------|----------|---------------|-------------|
+| **Next.js Data Cache** | Server Components, initial load | `cache`, `revalidate` | Build + runtime |
+| **HTTP Caching** | API routes, CDN | `Cache-Control` headers | Until TTL |
+| **React Cache** | Dedupe DB queries | `cache()` wrapper | Single request |
+| **React Query** | Client interactions | `staleTime`, `gcTime` | Browser session |
+
+**Golden Rule:** Start with server-side caching (Next.js Data Cache), add HTTP caching for APIs, use React Query for client-side interactivity.
+
+---
+
+## 7. Server vs Client Components
 
 ### 🖥️ Server Components (Default)
 
