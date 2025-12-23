@@ -1,3 +1,4 @@
+import { Metadata } from 'next';
 import Pagination from '@/app/ui/invoices/pagination';
 import Search from '@/app/ui/search';
 import Table from '@/app/ui/invoices/table';
@@ -7,6 +8,10 @@ import { InvoicesTableSkeleton } from '@/app/ui/skeletons';
 import { Suspense } from 'react';
 import { fetchInvoicesPages } from '@/app/lib/data';
 
+// Metadata specific to the Invoices page
+export const metadata: Metadata = {
+  title: 'Invoices', // This will be combined with the root layout title template
+};
  
 export default async function Page(props: {
   // NextJS automatically extracts search params from the URL 
